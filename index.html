@@ -270,6 +270,29 @@ select{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%
 .ans-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
 .ans-act{font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;border:1px solid var(--line-2);background:transparent;color:var(--text-3);padding:6px 10px;border-radius:3px;cursor:pointer;transition:.15s}
 .ans-act:hover{border-color:var(--mint);color:var(--mint)}
+/* ---- QUESTIONS / ANSWERS view toggle ---- */
+.view-tabs{display:flex;gap:8px;margin-bottom:14px}
+.view-tab{flex:1;font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:12px 10px;border:1px solid var(--line-2);background:transparent;color:var(--text-3);border-radius:var(--r);cursor:pointer;transition:.15s;text-align:center}
+.view-tab.active{border-color:var(--mint);color:var(--mint);background:var(--mint-soft)}
+.view-tab .n{opacity:.55;margin-left:6px;font-weight:600}
+/* ---- per-answer feedback toggle ---- */
+.fb-tabs{display:flex;gap:6px;margin-top:11px}
+.fb-tab{font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;border:1px solid var(--line-2);background:transparent;color:var(--text-3);padding:6px 11px;border-radius:999px;cursor:pointer;transition:.15s}
+.fb-tab.active{border-color:var(--mint);color:var(--mint);background:var(--mint-soft)}
+.fb-tab.t.active{border-color:var(--green);color:var(--green);background:color-mix(in srgb,var(--green) 13%,transparent)}
+.fb-panel{margin-top:9px}
+.fb-panel[hidden]{display:none}
+/* ---- student feedback list + composer ---- */
+.sfb{border:1px solid var(--line);border-left:2px solid var(--mint);border-radius:3px;background:var(--bg-3);padding:9px 11px;margin-bottom:7px}
+.sfb-by{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;color:var(--mint);margin-bottom:3px}
+.sfb-by .at{opacity:.8}
+.sfb-by .dt{color:var(--text-4);margin-left:7px}
+.sfb-txt{font-size:13px;line-height:1.55;color:var(--text-2);word-break:break-word}
+.sfb-empty{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--text-4);padding:4px 0 8px}
+.sfb-row{display:flex;gap:7px;margin-top:6px}
+.sfb-row input{flex:1;font-size:13px;padding:10px 12px}
+.sfb-post{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--mint);background:transparent;color:var(--mint);padding:0 15px;border-radius:var(--r);cursor:pointer;white-space:nowrap;transition:.15s}
+.sfb-post:hover{background:var(--mint);color:#000}
 
 /* empty / status */
 .empty-msg{font-family:var(--mono);font-size:12px;color:var(--text-3);padding:18px 4px;letter-spacing:.03em}
@@ -356,6 +379,11 @@ select{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%
     <span class="sec-num">// 001</span>
     <span class="sec-title">QUESTION BANK</span>
     <span class="sec-line"></span>
+  </div>
+
+  <div class="view-tabs" id="viewTabs">
+    <button class="view-tab active" data-view="questions">QUESTIONS<span class="n" id="vQ">0</span></button>
+    <button class="view-tab" data-view="answers">ANSWERS<span class="n" id="vA">0</span></button>
   </div>
 
   <div class="part-tabs" id="partTabs">
@@ -551,7 +579,8 @@ select{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where }
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+         collection, addDoc, getDocs, getDocsFromCache, doc, updateDoc, deleteDoc, arrayUnion, query, where }
   from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 /* audio now stored on Supabase Storage (see config below) — Firebase Storage SDK no longer needed */
 
@@ -566,7 +595,9 @@ const firebaseConfig = {
   measurementId: "G-0L1X6WHT1E"
 };
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+let db;
+try{ db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }); }
+catch(_){ db = getFirestore(app); }   // fallback if IndexedDB/persistence unavailable
 /* ---------- Supabase Storage: audio (URL + anon key are PUBLIC — safe in the browser) ---------- */
 const SUPABASE_URL    = "https://chqqpyxniwmzwbsxsaaz.supabase.co";
 const SUPABASE_KEY    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNocXFweXhuaXdtendic3hzYWF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMjg3MTUsImV4cCI6MjA5NzYwNDcxNX0.WgAUYwEroGsxOPjAphHwVMag4W7hjar9dEdln4ulKq4";
@@ -581,6 +612,7 @@ let role = 'student';
 let teacherMode = false;
 let teacherName = '';
 let currentPart = 'all';
+let viewMode = 'questions';      // 'questions' = questions only · 'answers' = questions + all answers
 let allQuestions = [];
 let allAnswers = [];
 let questionsLoaded = false;
@@ -601,23 +633,18 @@ function fmtTime(s){ const m=Math.floor(s/60),ss=s%60; return (m<10?'0':'')+m+':
 function toast(msg){ let el=$('pgToast'); if(!el){ el=document.createElement('div'); el.id='pgToast'; el.className='toast'; document.body.appendChild(el); } el.textContent=msg; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),4000); }
 function getUserId(){ let id=localStorage.getItem('pangea8_spk_user'); if(!id){ id='u-'+Math.random().toString(36).slice(2,10); localStorage.setItem('pangea8_spk_user',id); } return id; }
 
-/* ---------- load questions ---------- */
+/* ---------- load questions / answers (cache-first + parallel) ---------- */
+function ingestQ(snap){ const arr=[]; snap.forEach(d=>arr.push({id:d.id,data:d.data()})); arr.sort((a,b)=>toDate(b.data.timestamp).getTime()-toDate(a.data.timestamp).getTime()); allQuestions=arr; }
+function ingestA(snap){ const arr=[]; snap.forEach(d=>arr.push({id:d.id,data:d.data()})); allAnswers=arr; }
 async function loadQuestions(force){
   if(questionsLoaded && !force) return;
-  try{
-    const snap=await getDocs(questionsRef);
-    const arr=[]; snap.forEach(d=>arr.push({id:d.id,data:d.data()}));
-    arr.sort((a,b)=>toDate(b.data.timestamp).getTime()-toDate(a.data.timestamp).getTime());
-    allQuestions=arr; questionsLoaded=true;
-  }catch(e){ console.error('load questions',e); toast('Could not load questions.'); }
+  try{ ingestQ(await getDocs(questionsRef)); questionsLoaded=true; }
+  catch(e){ console.error('load questions',e); toast('Could not load questions.'); }
 }
 async function loadAnswers(force){
   if(answersLoaded && !force) return;
-  try{
-    const snap=await getDocs(answersRef);
-    const arr=[]; snap.forEach(d=>arr.push({id:d.id,data:d.data()}));
-    allAnswers=arr; answersLoaded=true;
-  }catch(e){ console.error('load answers',e); }
+  try{ ingestA(await getDocs(answersRef)); answersLoaded=true; }
+  catch(e){ console.error('load answers',e); }
 }
 
 /* ---------- render ---------- */
@@ -626,10 +653,10 @@ function answersFor(qId){ return allAnswers.filter(a=>a.data.questionId===qId).s
 function updateCounts(){
   const by=p=>allQuestions.filter(q=>String(q.data.part)===String(p)).length;
   $('cAll').textContent=allQuestions.length; $('c1').textContent=by(1); $('c2').textContent=by(2); $('c3').textContent=by(3);
+  const vq=$('vQ'), va=$('vA'); if(vq)vq.textContent=allQuestions.length; if(va)va.textContent=allAnswers.length;
 }
 
-async function render(){
-  await loadQuestions(); await loadAnswers();
+function paint(){
   updateCounts();
   const list=$('qList'); list.innerHTML='';
   let qs=allQuestions;
@@ -637,18 +664,30 @@ async function render(){
   if(!qs.length){ list.innerHTML='<div class="empty-msg">'+(teacherMode?'NO QUESTIONS YET · ADD ONE ABOVE':'NO QUESTIONS IN THIS PART YET · CHECK BACK SOON')+'</div>'; return; }
   for(const q of qs) list.appendChild(buildQCard(q.id,q.data));
 }
+async function render(){
+  if(!questionsLoaded || !answersLoaded){
+    // 1) instant paint from local cache — shows immediately on repeat visits (offline-first)
+    try{
+      const [qc,ac]=await Promise.all([getDocsFromCache(questionsRef),getDocsFromCache(answersRef)]);
+      if(qc.size||ac.size){ if(qc.size)ingestQ(qc); if(ac.size)ingestA(ac); paint(); }
+    }catch(_){}
+    // 2) refresh from server in parallel (was sequential before)
+    await Promise.all([loadQuestions(),loadAnswers()]);
+  }
+  paint();
+}
 
 function buildQCard(qId,q){
   const card=document.createElement('div');
-  const myAnswers=answersFor(qId);
-  const mine=myAnswers.find(a=>a.data.userId===getUserId());
+  const allAns=answersFor(qId);
+  const mine=allAns.find(a=>a.data.userId===getUserId());
   card.className='q-card'+(mine?' answered':'');
 
   const top=document.createElement('div'); top.className='q-top';
   const meta=document.createElement('div'); meta.className='q-meta';
   const partChip=document.createElement('span'); partChip.className='q-chip part'; partChip.textContent='PART '+q.part; meta.appendChild(partChip);
   if(q.topic){ const t=document.createElement('span'); t.className='q-chip topic'; t.textContent=q.topic; meta.appendChild(t); }
-  if(myAnswers.length){ const a=document.createElement('span'); a.className='q-chip ans'; a.textContent=myAnswers.length+' ANSWER'+(myAnswers.length>1?'S':''); meta.appendChild(a); }
+  if(allAns.length){ const a=document.createElement('span'); a.className='q-chip ans'; a.textContent=allAns.length+' ANSWER'+(allAns.length>1?'S':''); meta.appendChild(a); }
   top.appendChild(meta);
   card.appendChild(top);
 
@@ -660,25 +699,30 @@ function buildQCard(qId,q){
   const qt=document.createElement('div'); qt.className='q-text'; qt.textContent=q.text; card.appendChild(qt);
   if(q.cue){ const cue=document.createElement('div'); cue.className='q-cue'; cue.textContent=q.cue; card.appendChild(cue); }
 
-  // student: answer button (+ show own submission status)
+  const showAnswers=(viewMode==='answers');   // ANSWERS view → everyone's answers · QUESTIONS view → questions only
+
   if(!teacherMode){
+    // student
     const zone=document.createElement('div'); zone.className='answer-zone';
     const btn=document.createElement('button'); btn.className='mini-btn';
     btn.style.borderColor='var(--mint)'; btn.style.color='var(--mint)';
     btn.textContent=mine?'🎙 ANSWER AGAIN':'🎙 ANSWER THIS';
     btn.addEventListener('click',()=>openAnswerModal(qId,q)); zone.appendChild(btn);
-    // show the student's own answers + any feedback
-    const own=myAnswers.filter(a=>a.data.userId===getUserId());
-    if(own.length){
-      const wrap=document.createElement('div'); wrap.className='answers';
-      own.forEach(a=>wrap.appendChild(buildAnswerCard(a.id,a.data,false)));
-      zone.appendChild(wrap);
+    if(showAnswers){
+      if(allAns.length){
+        const wrap=document.createElement('div'); wrap.className='answers';
+        allAns.forEach(a=>wrap.appendChild(buildAnswerCard(a.id,a.data,false)));
+        zone.appendChild(wrap);
+      } else {
+        const none=document.createElement('div'); none.className='empty-msg'; none.style.padding='10px 0 0'; none.textContent='No answers yet — be the first.';
+        zone.appendChild(none);
+      }
     }
     card.appendChild(zone);
-  } else {
-    // teacher: show all student answers
-    if(myAnswers.length){
-      const withAudio=myAnswers.filter(a=>a.data.audioUrl);
+  } else if(showAnswers){
+    // teacher · ANSWERS view: all student answers
+    if(allAns.length){
+      const withAudio=allAns.filter(a=>a.data.audioUrl);
       if(withAudio.length>1){
         const pa=document.createElement('button'); pa.className='play-all';
         pa.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> PLAY ALL '+withAudio.length+' ANSWERS';
@@ -690,7 +734,7 @@ function buildQCard(qId,q){
         card.appendChild(pa);
       }
       const wrap=document.createElement('div'); wrap.className='answers';
-      myAnswers.forEach(a=>wrap.appendChild(buildAnswerCard(a.id,a.data,true)));
+      allAns.forEach(a=>wrap.appendChild(buildAnswerCard(a.id,a.data,true)));
       card.appendChild(wrap);
     } else {
       const none=document.createElement('div'); none.className='empty-msg'; none.style.padding='10px 0 0'; none.textContent='No answers yet.';
@@ -717,11 +761,32 @@ function buildAnswerCard(aId,a,forTeacher){
     tg.innerHTML='✈ OPEN VOICE IN TELEGRAM'; c.appendChild(tg);
   }
 
-  // feedback (if any)
-  if(a.feedback || a.band){
+  // ----- feedback: TEACHER / STUDENT toggle -----
+  const sfb=Array.isArray(a.studentFb)?a.studentFb:[];
+  const hasT=!!(a.feedback||a.band);
+
+  const fbTabs=document.createElement('div'); fbTabs.className='fb-tabs';
+  const tBtn=document.createElement('button'); tBtn.className='fb-tab t active'; tBtn.textContent='TEACHER FEEDBACK'+(hasT?' ✓':'');
+  const sBtn=document.createElement('button'); sBtn.className='fb-tab'; sBtn.textContent='STUDENT FEEDBACK'+(sfb.length?' '+sfb.length:'');
+  fbTabs.appendChild(tBtn); fbTabs.appendChild(sBtn); c.appendChild(fbTabs);
+
+  const tPanel=document.createElement('div'); tPanel.className='fb-panel'; tPanel.dataset.panel='teacher';
+  renderTeacherFb(tPanel,aId,a,forTeacher,hasT); c.appendChild(tPanel);
+
+  const sPanel=document.createElement('div'); sPanel.className='fb-panel'; sPanel.dataset.panel='student'; sPanel.hidden=true;
+  renderStudentFb(sPanel,aId,sfb); c.appendChild(sPanel);
+
+  tBtn.addEventListener('click',()=>{ tBtn.classList.add('active'); sBtn.classList.remove('active'); tPanel.hidden=false; sPanel.hidden=true; });
+  sBtn.addEventListener('click',()=>{ sBtn.classList.add('active'); tBtn.classList.remove('active'); sPanel.hidden=false; tPanel.hidden=true; });
+  return c;
+}
+
+/* teacher feedback panel (official) */
+function renderTeacherFb(panel,aId,a,forTeacher,hasT){
+  if(hasT){
     const fb=document.createElement('div'); fb.className='ans-fb';
     const lab=document.createElement('div'); lab.className='ans-fb-label';
-    lab.innerHTML='FEEDBACK'+(a.teacher?' · '+esc(a.teacher):'');
+    lab.innerHTML='TEACHER FEEDBACK'+(a.teacher?' · '+esc(a.teacher):'');
     if(a.band){ const b=document.createElement('span'); b.className='ans-band'; b.textContent='BAND '+a.band; lab.appendChild(b); }
     fb.appendChild(lab);
     if(a.feedback){
@@ -734,10 +799,12 @@ function buildAnswerCard(aId,a,forTeacher){
         fb.appendChild(s);
       });
     }
-    c.appendChild(fb);
+    panel.appendChild(fb);
+  } else {
+    const none=document.createElement('div'); none.className='sfb-empty';
+    none.textContent=forTeacher?'No feedback yet — add it below.':'⧗ Awaiting teacher feedback.';
+    panel.appendChild(none);
   }
-
-  // teacher actions
   if(forTeacher){
     const acts=document.createElement('div'); acts.className='ans-actions';
     const fbBtn=document.createElement('button'); fbBtn.className='ans-act'; fbBtn.style.borderColor='var(--mint)'; fbBtn.style.color='var(--mint)';
@@ -745,13 +812,61 @@ function buildAnswerCard(aId,a,forTeacher){
     fbBtn.addEventListener('click',()=>openFbModal(aId,a)); acts.appendChild(fbBtn);
     const del=document.createElement('button'); del.className='ans-act'; del.textContent='✕ DELETE';
     del.addEventListener('click',()=>deleteAnswer(aId,a)); acts.appendChild(del);
-    c.appendChild(acts);
-  } else if(!a.feedback && !a.band){
-    const wait=document.createElement('div'); wait.style.cssText='font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-4);margin-top:8px';
-    wait.textContent='⧗ AWAITING TEACHER FEEDBACK';
-    c.appendChild(wait);
+    panel.appendChild(acts);
   }
-  return c;
+}
+
+/* student (peer) feedback panel — list + composer, anyone can post */
+function renderStudentFb(panel,aId,sfb){
+  if(sfb.length){
+    sfb.slice().sort((x,y)=>(x.ts||0)-(y.ts||0)).forEach(e=>{
+      const it=document.createElement('div'); it.className='sfb';
+      const by=document.createElement('div'); by.className='sfb-by';
+      by.innerHTML='<span class="at">@</span>'+esc(e.by||'student')+'<span class="dt">'+fmtDate(toDate(e.ts))+'</span>';
+      const tx=document.createElement('div'); tx.className='sfb-txt'; tx.textContent=e.text||'';
+      it.appendChild(by); it.appendChild(tx); panel.appendChild(it);
+    });
+  } else {
+    const none=document.createElement('div'); none.className='sfb-empty'; none.textContent='No student feedback yet — be the first.'; panel.appendChild(none);
+  }
+  const row=document.createElement('div'); row.className='sfb-row';
+  const inp=document.createElement('input'); inp.type='text'; inp.placeholder='Write feedback…'; inp.maxLength=500;
+  const post=document.createElement('button'); post.className='sfb-post'; post.textContent='POST';
+  const submit=async()=>{
+    const text=inp.value.trim(); if(!text) return;
+    post.disabled=true; const old=post.textContent; post.textContent='…';
+    const entry=await postStudentFb(aId,text);
+    post.disabled=false; post.textContent=old;
+    if(entry){
+      inp.value='';
+      const item=allAnswers.find(x=>x.id===aId);
+      if(item){ if(!Array.isArray(item.data.studentFb)) item.data.studentFb=[]; item.data.studentFb.push(entry); }
+      const empty=panel.querySelector('.sfb-empty'); if(empty) empty.remove();
+      const it=document.createElement('div'); it.className='sfb';
+      const by=document.createElement('div'); by.className='sfb-by';
+      by.innerHTML='<span class="at">@</span>'+esc(entry.by||'student')+'<span class="dt">'+fmtDate(toDate(entry.ts))+'</span>';
+      const tx=document.createElement('div'); tx.className='sfb-txt'; tx.textContent=entry.text||'';
+      it.appendChild(by); it.appendChild(tx); panel.insertBefore(it,row);
+      const tabs=panel.parentNode&&panel.parentNode.querySelector('.fb-tabs');
+      const sTab=tabs&&tabs.querySelectorAll('.fb-tab')[1];
+      if(sTab&&item) sTab.textContent='STUDENT FEEDBACK '+item.data.studentFb.length;
+    }
+  };
+  post.addEventListener('click',submit);
+  inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); submit(); } });
+  row.appendChild(inp); row.appendChild(post); panel.appendChild(row);
+}
+
+async function postStudentFb(aId,text){
+  let name=(localStorage.getItem('pangea8_spk_name')||'').trim();
+  if(!name && teacherMode) name=teacherName||'teacher';
+  if(!name){ name=(prompt('Your name (shown with your feedback):')||'').trim(); if(name) localStorage.setItem('pangea8_spk_name',name); }
+  if(!name) return null;
+  const entry={ by:name, uid:getUserId(), text:text.trim(), ts:Date.now() };
+  try{
+    await updateDoc(doc(db,'speakingAnswers',aId),{ studentFb:arrayUnion(entry) });
+    toast('✓ Feedback posted'); return entry;
+  }catch(e){ console.error('student fb',e); toast('Could not post: '+((e&&e.code)||'error')); return null; }
 }
 
 /* ---------- teacher: add / delete question ---------- */
@@ -1106,6 +1221,13 @@ function init(){
   document.querySelectorAll('.part-tab').forEach(t=>t.addEventListener('click',()=>{
     currentPart=t.dataset.part;
     document.querySelectorAll('.part-tab').forEach(x=>x.classList.toggle('active',x===t));
+    render();
+  }));
+
+  // view toggle: QUESTIONS / ANSWERS
+  document.querySelectorAll('.view-tab').forEach(t=>t.addEventListener('click',()=>{
+    viewMode=t.dataset.view;
+    document.querySelectorAll('.view-tab').forEach(x=>x.classList.toggle('active',x===t));
     render();
   }));
 
