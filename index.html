@@ -553,8 +553,7 @@ select{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where }
   from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
-import { getStorage, ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL, deleteObject }
-  from "https://www.gstatic.com/firebasejs/12.6.0/firebase-storage.js";
+/* audio now stored on Supabase Storage (see config below) — Firebase Storage SDK no longer needed */
 
 /* ---------- config (same pangeya-essay project) ---------- */
 const firebaseConfig = {
@@ -568,7 +567,10 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const storage = getStorage(app);
+/* ---------- Supabase Storage: audio (URL + anon key are PUBLIC — safe in the browser) ---------- */
+const SUPABASE_URL    = "https://chqqpyxniwmzwbsxsaaz.supabase.co";
+const SUPABASE_KEY    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNocXFweXhuaXdtendic3hzYWF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMjg3MTUsImV4cCI6MjA5NzYwNDcxNX0.WgAUYwEroGsxOPjAphHwVMag4W7hjar9dEdln4ulKq4";
+const SUPABASE_BUCKET = "speaking";
 const questionsRef = collection(db, "speakingQuestions");
 const answersRef = collection(db, "speakingAnswers");
 
@@ -773,7 +775,7 @@ async function deleteQuestion(qId){
     await deleteDoc(doc(db,'speakingQuestions',qId));
     // also remove answers for it
     const kids=answersFor(qId);
-    for(const a of kids){ try{ await deleteDoc(doc(db,'speakingAnswers',a.id)); if(a.data.audioPath){ try{ await deleteObject(storageRef(storage,a.data.audioPath)); }catch(_){}} }catch(_){} }
+    for(const a of kids){ try{ await deleteDoc(doc(db,'speakingAnswers',a.id)); }catch(_){} }
     allQuestions=allQuestions.filter(q=>q.id!==qId);
     allAnswers=allAnswers.filter(a=>a.data.questionId!==qId);
     render(); toast('Question deleted.');
@@ -857,21 +859,28 @@ async function submitAnswer(){
   let audioUrl='', audioPath='', tgLink='';
   try{
     if(recMode==='mic'){
-      if(!recBlob){ toast('Record your answer first.'); btn.disabled=false; return; }
+      if(!recBlob){ toast('Record your answer first.'); btn.disabled=false; btn.innerHTML=old; return; }
+      // direct browser → Supabase Storage upload (anon key; no secret in this page). Progress via XHR.
       const ext=(recBlob.type.includes('mp4')||recBlob.type.includes('mpeg'))?'m4a':'webm';
       audioPath='speaking/'+currentAnswerQ.id+'/'+getUserId()+'-'+Date.now()+'.'+ext;
-      const sref=storageRef(storage,audioPath);
-      // resumable upload → live progress, feels much faster to the user
       btn.innerHTML='UPLOADING 0%';
       await new Promise((resolve,reject)=>{
-        const task=uploadBytesResumable(sref,recBlob,{contentType:recBlob.type||'audio/webm'});
-        task.on('state_changed',
-          snap=>{ const pct=Math.round((snap.bytesTransferred/snap.totalBytes)*100); btn.innerHTML='UPLOADING '+pct+'%'; },
-          err=>reject(err),
-          ()=>resolve()
-        );
+        const xhr=new XMLHttpRequest();
+        xhr.open('POST',SUPABASE_URL+'/storage/v1/object/'+SUPABASE_BUCKET+'/'+audioPath);
+        xhr.setRequestHeader('apikey',SUPABASE_KEY);
+        xhr.setRequestHeader('Authorization','Bearer '+SUPABASE_KEY);
+        xhr.setRequestHeader('Content-Type',recBlob.type||'audio/webm');
+        xhr.setRequestHeader('x-upsert','true');
+        xhr.upload.onprogress=e=>{ if(e.lengthComputable){ btn.innerHTML='UPLOADING '+Math.round(e.loaded/e.total*100)+'%'; } };
+        xhr.onload=()=>{
+          if(xhr.status>=200&&xhr.status<300){ resolve(); }
+          else { let m='upload '+xhr.status; try{ const j=JSON.parse(xhr.responseText); m=j.message||j.error||m; }catch(_){} reject(new Error(m)); }
+        };
+        xhr.onerror=()=>reject(new Error('network error'));
+        xhr.send(recBlob);
       });
-      audioUrl=await getDownloadURL(sref);
+      // public bucket → permanent public playback URL built from the path we uploaded to
+      audioUrl=SUPABASE_URL+'/storage/v1/object/public/'+SUPABASE_BUCKET+'/'+audioPath;
     } else {
       tgLink=$('tgLink').value.trim();
       if(!tgLink){ toast('Paste your Telegram voice link.'); btn.disabled=false; btn.innerHTML=old; return; }
@@ -915,7 +924,6 @@ async function deleteAnswer(aId,a){
   if(!confirm('Delete this answer?')) return;
   try{
     await deleteDoc(doc(db,'speakingAnswers',aId));
-    if(a.audioPath){ try{ await deleteObject(storageRef(storage,a.audioPath)); }catch(_){}}
     allAnswers=allAnswers.filter(x=>x.id!==aId);
     render(); toast('Answer deleted.');
   }catch(e){ console.error(e); toast('Delete failed.'); }
