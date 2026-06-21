@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>pangea8 · Add Speaking Questions</title>
+<style>
+  :root{--bg:#000;--bg-2:#0d0d0d;--line:rgba(255,255,255,.16);--mint:#D71921;--mint-soft:rgba(215,25,33,.12);--green:#27d07f;--text:#fff;--text-3:#6e6e6e;--mono:'JetBrains Mono',ui-monospace,monospace}
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--mono);padding:26px 18px;max-width:680px;margin:0 auto;line-height:1.5}
+  h1{font-size:16px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px}
+  h1 .s{color:var(--mint)}
+  .sub{color:var(--text-3);font-size:12px;letter-spacing:.04em;margin-bottom:22px}
+  .box{border:1px solid var(--line);border-radius:6px;background:var(--bg-2);padding:18px;margin-bottom:14px}
+  .stat{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;margin-bottom:14px}
+  .stat b{color:var(--mint)}
+  input{width:100%;background:#000;border:1px solid var(--line);border-radius:5px;color:#fff;font-family:var(--mono);font-size:15px;padding:12px 14px;margin-bottom:12px}
+  input:focus{outline:none;border-color:var(--mint)}
+  button{width:100%;font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:14px;border-radius:5px;border:1px solid var(--mint);background:var(--mint);color:#000;cursor:pointer;transition:.15s}
+  button:disabled{opacity:.5;cursor:default}
+  button.ghost{background:transparent;color:var(--mint)}
+  #log{font-size:12px;color:var(--text-3);white-space:pre-wrap;margin-top:14px;max-height:240px;overflow:auto}
+  .ok{color:var(--green)} .err{color:var(--mint)}
+  .bar{height:6px;border-radius:3px;background:#1a1a1a;overflow:hidden;margin-top:12px}
+  .bar i{display:block;height:100%;width:0;background:var(--mint);transition:.2s}
+</style>
+</head>
+<body>
+  <h1>pangea8<span class="s">_speaking</span> · question bank</h1>
+  <div class="sub">One-tap importer — adds standard IELTS Speaking questions to your app.</div>
+
+  <div class="box">
+    <div class="stat">
+      <div>Part 1: <b id="n1">0</b></div>
+      <div>Part 2: <b id="n2">0</b></div>
+      <div>Part 3: <b id="n3">0</b></div>
+      <div>Total: <b id="nt">0</b></div>
+    </div>
+    <input id="key" type="password" placeholder="Teacher key" autocomplete="off">
+    <button id="go">Import questions</button>
+    <div class="bar"><i id="bar"></i></div>
+    <div id="log"></div>
+  </div>
+  <button class="ghost" id="open" onclick="location.href='./'">← Back to Speaking Lab</button>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+import { getFirestore, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBnmbg7CyLki-M1E4rxPevJ741yTykliDA",
+  authDomain: "pangeya-essay.firebaseapp.com",
+  projectId: "pangeya-essay",
+  storageBucket: "pangeya-essay.appspot.com",
+  messagingSenderId: "783326121302",
+  appId: "1:783326121302:web:7d73c5110fb5682e5fdaf7"
+};
+const TEACHER_KEY = 'CTNLC';
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const ref = collection(db, "speakingQuestions");
+
+const $ = id => document.getElementById(id);
+const cue = (...pts) => "You should say:\n" + pts.map(p=>"- "+p).join("\n") + "\nand explain your answer.";
+
+/* ---- standard IELTS Speaking question bank (generic, exam-style) ---- */
+const Q = [];
+const p1 = (topic, ...qs) => qs.forEach(t => Q.push({part:1, topic, text:t, cue:""}));
+const p3 = (topic, ...qs) => qs.forEach(t => Q.push({part:3, topic, text:t, cue:""}));
+const p2 = (topic, text, c) => Q.push({part:2, topic, text, cue:c});
+
+/* PART 1 */
+p1("Work / Study","Do you work or are you a student?","What do you like most about your job or studies?","Why did you choose this field?","What would you like to do in the future?");
+p1("Hometown","Where is your hometown?","What do you like about your hometown?","Has your hometown changed much in recent years?","Would you like to live there in the future?");
+p1("Home","Do you live in a house or an apartment?","What is your favourite room in your home?","Is there anything you would like to change about your home?");
+p1("Daily routine","What does a typical day look like for you?","Are you a morning person or an evening person?","Has your daily routine changed compared with a few years ago?");
+p1("Free time","What do you usually do in your free time?","Do you prefer spending free time alone or with others?","Did you have any hobbies when you were a child?");
+p1("Music","What kind of music do you like?","When do you usually listen to music?","Have your musical tastes changed over time?","Can you play any musical instruments?");
+p1("Food","What is your favourite kind of food?","Do you prefer eating at home or in restaurants?","Do you know how to cook?");
+p1("Technology","How often do you use your mobile phone?","What do you mainly use the internet for?","Could you manage without your smartphone?");
+p1("Travel","Do you like travelling?","What is the best place you have ever visited?","Do you prefer travelling alone or with other people?");
+p1("Reading","Do you enjoy reading?","What kind of books do you like to read?","Did your parents read to you when you were young?");
+p1("Weather","What is the weather usually like in your country?","Which season do you like the most?","Does the weather affect your mood?");
+p1("Sport & exercise","Do you play any sports?","How often do you exercise?","Did you enjoy sports at school?");
+
+/* PART 2 */
+p2("People","Describe a person you admire.", cue("who this person is","how you know them","what they do"));
+p2("Places","Describe a place you like to visit.", cue("where it is","how often you go there","what you do there"));
+p2("Experiences","Describe a memorable trip you took.", cue("where you went","who you went with","what you did there"));
+p2("Skills","Describe a skill you would like to learn.", cue("what the skill is","why you want to learn it","how you would learn it"));
+p2("Books","Describe a book you have recently read.", cue("what the book was","what it was about","why you decided to read it"));
+p2("Objects","Describe a gift you gave to someone.", cue("what it was","who you gave it to","why you chose it"));
+p2("Technology","Describe a piece of technology you find useful.", cue("what it is","how you use it","how often you use it"));
+p2("Events","Describe a time you helped someone.", cue("who you helped","what you did","why they needed help"));
+p2("Hobbies","Describe a hobby you enjoy.", cue("what the hobby is","how you started it","how often you do it"));
+p2("Goals","Describe a goal you would like to achieve.", cue("what the goal is","why it matters to you","how you plan to achieve it"));
+p2("Media","Describe a website or app you often use.", cue("what it is","what you use it for","how often you use it"));
+p2("Places","Describe a foreign country you would like to visit.", cue("which country it is","why you want to go there","what you would do there"));
+
+/* PART 3 */
+p3("People & role models","Why do some people become role models for others?","Do you think celebrities make good role models?","How has the idea of a hero changed over time?","Is it important for children to have someone to look up to?");
+p3("Cities & places","Why do people enjoy visiting new places?","How has tourism changed your country?","Do cities or the countryside offer a better quality of life?","What can be done to protect popular tourist destinations?");
+p3("Travel","Why do people travel abroad these days?","Do you think travelling makes people more open-minded?","How might the way people travel change in the future?");
+p3("Technology","How has technology changed the way people communicate?","Do you think people rely too much on technology?","What are the disadvantages of spending too much time online?");
+p3("Education","Do you think exams are the best way to assess students?","How important is it to learn a foreign language?","Should students learn more practical skills at school?");
+p3("Work","Why do some people change jobs frequently?","Do you think more people will work from home in the future?","Is money the most important factor when choosing a job?");
+p3("Environment","What are the biggest environmental problems today?","Whose responsibility is it to protect the environment — individuals or governments?","Do you think people are doing enough to reduce waste?");
+p3("Media & society","How do most people get their news nowadays?","Does social media have a mostly positive or negative effect on society?","Should there be more control over what is published online?");
+
+/* counts */
+const c1=Q.filter(q=>q.part===1).length, c2=Q.filter(q=>q.part===2).length, c3=Q.filter(q=>q.part===3).length;
+$('n1').textContent=c1; $('n2').textContent=c2; $('n3').textContent=c3; $('nt').textContent=Q.length;
+
+function logLine(msg, cls){ const d=document.createElement('div'); if(cls)d.className=cls; d.textContent=msg; $('log').appendChild(d); $('log').scrollTop=$('log').scrollHeight; }
+
+$('go').addEventListener('click', async ()=>{
+  if($('key').value.trim() !== TEACHER_KEY){ logLine('✗ Wrong teacher key.', 'err'); return; }
+  $('go').disabled=true; $('log').innerHTML=''; logLine('Loading existing questions…');
+  let existing=new Set();
+  try{
+    const snap=await getDocs(ref);
+    snap.forEach(d=>{ const t=(d.data().text||'').trim().toLowerCase(); if(t) existing.add(t); });
+    logLine('Found '+existing.size+' questions already in the app.');
+  }catch(e){ logLine('Could not read existing questions: '+(e.code||e.message),'err'); $('go').disabled=false; return; }
+
+  let added=0, skipped=0;
+  const base=Date.now();
+  for(let i=0;i<Q.length;i++){
+    const q=Q[i];
+    if(existing.has(q.text.trim().toLowerCase())){ skipped++; }
+    else{
+      try{
+        await addDoc(ref, { part:q.part, topic:q.topic, text:q.text, cue:q.cue||'', teacher:'Question Bank', timestamp: base + (Q.length - i) });
+        added++;
+      }catch(e){ logLine('✗ Failed: '+q.text.slice(0,40)+' — '+(e.code||e.message),'err'); }
+    }
+    $('bar').style.width = Math.round(((i+1)/Q.length)*100)+'%';
+  }
+  logLine('✓ Done. Added '+added+', skipped '+skipped+' (already present).', 'ok');
+  logLine('Open the Speaking Lab → questions are live. You can delete this page now.');
+  $('go').disabled=false; $('go').textContent='Import again';
+});
+</script>
+</body>
+</html>
