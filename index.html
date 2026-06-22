@@ -1411,19 +1411,60 @@ function aiAddMsg(text, who){
   $('aiChat').scrollTop = $('aiChat').scrollHeight;
 }
 
+const AI_TTS_ENDPOINT = 'https://pangeya-ai.vercel.app/api/tts';
+const AI_VOICE = 'fable';          // OpenAI voice: alloy / echo / fable / onyx / nova / shimmer
+const AI_SILENT = 'data:audio/wav;base64,UklGRjwAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+const aiAudio = new Audio();
+aiAudio.preload = 'auto';
+function aiUnlockAudio(){           // iOS/Safari needs a gesture-initiated play before later audio works
+  try{ aiAudio.src = AI_SILENT; const p = aiAudio.play(); if(p && p.catch) p.catch(()=>{}); }catch(_){}
+}
 function aiPickVoice(){
   if(!('speechSynthesis' in window)) return;
   const vs = speechSynthesis.getVoices();
-  aiVoice = vs.find(v=>/en[-_]GB/i.test(v.lang)) || vs.find(v=>/^en/i.test(v.lang)) || vs[0] || null;
+  const score = v=>{
+    const n = (v.name||'').toLowerCase(); let s = 0;
+    if(/en[-_]gb/i.test(v.lang)) s += 5; else if(/^en/i.test(v.lang)) s += 3;
+    if(/google/.test(n)) s += 4;
+    if(/natural|neural|enhanced|premium/.test(n)) s += 5;
+    if(/siri|samantha|daniel|aria|libby|sonia|jenny/.test(n)) s += 3;
+    if(/compact|espeak|fred|albert|zarvox/.test(n)) s -= 5;
+    return s;
+  };
+  aiVoice = vs.slice().sort((a,b)=>score(b)-score(a))[0] || null;
 }
-function aiSpeak(text){
-  if(!('speechSynthesis' in window)){ aiSetStatus('Your turn — tap the mic or type', ''); return; }
+async function aiSpeak(text){
+  const clean = (text||'').replace(/[*_#`>]/g,'').trim();
+  if(!clean){ aiSetStatus('Your turn — tap the mic or type',''); return; }
+  // 1) natural neural voice via the AI backend
+  try{
+    const res = await fetch(AI_TTS_ENDPOINT, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text: clean, voice: AI_VOICE })
+    });
+    if(!res.ok) throw new Error('tts ' + res.status);
+    const blob = await res.blob();
+    if(!blob || blob.size < 256) throw new Error('bad audio');
+    if(aiAudio._url){ try{ URL.revokeObjectURL(aiAudio._url); }catch(_){} }
+    aiAudio._url = URL.createObjectURL(blob);
+    aiAudio.src = aiAudio._url;
+    aiAudio.onplay  = ()=>aiSetStatus('Speaking…', 'speaking');
+    aiAudio.onended = ()=>aiSetStatus('Your turn — tap the mic or type', '');
+    aiAudio.onerror = ()=>aiSpeakBrowser(clean);
+    await aiAudio.play();
+    return;
+  }catch(e){
+    aiSpeakBrowser(clean);          // 2) fall back to the best available browser voice
+  }
+}
+function aiSpeakBrowser(clean){
+  if(!('speechSynthesis' in window)){ aiSetStatus('Your turn — tap the mic or type',''); return; }
   try{
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text.replace(/[*_#`>]/g,''));
+    const u = new SpeechSynthesisUtterance(clean);
     if(aiVoice) u.voice = aiVoice;
     u.lang = (aiVoice && aiVoice.lang) || 'en-GB';
-    u.rate = 0.96; u.pitch = 1;
+    u.rate = 0.97; u.pitch = 1.02;
     u.onstart = ()=>aiSetStatus('Speaking…', 'speaking');
     u.onend   = ()=>aiSetStatus('Your turn — tap the mic or type', '');
     speechSynthesis.speak(u);
@@ -1553,12 +1594,12 @@ function init(){
   $('guideClose').addEventListener('click',()=>$('guideModal').classList.remove('show'));
 
   // AI examiner
-  $('aiBtn').addEventListener('click', openAI);
+  $('aiBtn').addEventListener('click', ()=>{ aiUnlockAudio(); openAI(); });
   $('aiX').addEventListener('click', closeAI);
-  $('aiSend').addEventListener('click', ()=>{ const t=$('aiText').value.trim(); if(t){ $('aiText').value=''; aiSend(t); } });
+  $('aiSend').addEventListener('click', ()=>{ aiUnlockAudio(); const t=$('aiText').value.trim(); if(t){ $('aiText').value=''; aiSend(t); } });
   $('aiText').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); const t=$('aiText').value.trim(); if(t){ $('aiText').value=''; aiSend(t); } } });
-  $('aiMic').addEventListener('click', aiToggleMic);
-  document.querySelectorAll('#aiModes button').forEach(b=>b.addEventListener('click', ()=>aiStart(b.dataset.m)));
+  $('aiMic').addEventListener('click', ()=>{ aiUnlockAudio(); aiToggleMic(); });
+  document.querySelectorAll('#aiModes button').forEach(b=>b.addEventListener('click', ()=>{ aiUnlockAudio(); aiStart(b.dataset.m); }));
   aiInitRec();
   if('speechSynthesis' in window){ aiPickVoice(); speechSynthesis.onvoiceschanged = aiPickVoice; }
 
