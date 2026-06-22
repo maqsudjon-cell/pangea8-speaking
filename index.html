@@ -352,6 +352,61 @@ select{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%
 
 @media(max-width:560px){.shell{padding:0 14px}.topbar{padding:12px 14px;margin:0 -14px}.panel-pad{padding:18px}.foot{margin:46px -14px 0}}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.001s!important;transition-duration:.05s!important}}
+/* ===================== AI EXAMINER ===================== */
+.burst{display:block}
+.burst .ray{stroke:#2BE6A0;stroke-width:7;stroke-linecap:round;fill:none}
+/* hero CTA button */
+.ai-cta{display:flex;align-items:center;gap:13px;width:100%;margin:2px 0 2px;padding:14px 15px;border-radius:10px;border:1px solid rgba(43,230,160,.35);background:linear-gradient(135deg,rgba(43,230,160,.12),rgba(43,230,160,.02));color:#fff;cursor:pointer;font-family:var(--mono);text-align:left;transition:.15s}
+.ai-cta:hover{border-color:#2BE6A0;transform:translateY(-1px);box-shadow:0 6px 24px rgba(43,230,160,.14)}
+.ai-cta .mini{width:30px;height:30px;flex:0 0 30px;filter:drop-shadow(0 0 4px rgba(43,230,160,.55))}
+.ai-cta .lab{display:block;font-size:13px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:#fff}
+.ai-cta .sub{display:block;font-size:11px;color:var(--text-3);letter-spacing:.01em;margin-top:2px}
+.ai-cta .ar{margin-left:auto;color:#2BE6A0;font-size:16px}
+/* full-screen overlay */
+.ai-modal{--ai-mint:#2BE6A0;--ai-glow:rgba(43,230,160,.55);position:fixed;inset:0;z-index:500;background:#000;display:none;flex-direction:column}
+.ai-modal.show{display:flex}
+.ai-topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08);flex:0 0 auto}
+.ai-brand{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#fff}
+.ai-brand b{color:var(--ai-mint)}
+.ai-xbtn{width:34px;height:34px;border-radius:8px;border:1px solid rgba(255,255,255,.16);background:transparent;color:#fff;font-size:15px;cursor:pointer}
+.ai-xbtn:hover{border-color:var(--ai-mint);color:var(--ai-mint)}
+.ai-stage{display:flex;flex-direction:column;align-items:center;gap:11px;padding:20px 16px 10px;flex:0 0 auto}
+.ai-orb{width:128px;height:128px;position:relative;display:grid;place-items:center}
+.ai-orb::before{content:'';position:absolute;inset:-28%;background:radial-gradient(circle,var(--ai-glow),transparent 62%);opacity:.5;animation:orbBreathe 3.2s ease-in-out infinite}
+.ai-orb .burst{width:100%;height:100%;overflow:visible;filter:drop-shadow(0 0 10px var(--ai-glow));animation:orbSpin 48s linear infinite;position:relative}
+.ai-orb .ray{stroke-width:6.5;transform-origin:50px 50px;animation:orbBreathe 3.2s ease-in-out infinite}
+.ai-orb .sonar{position:absolute;inset:0;border-radius:50%;border:2px solid var(--ai-mint);opacity:0;pointer-events:none}
+.ai-orb.thinking .burst{animation-duration:7s}
+.ai-orb.thinking .ray{animation:orbThink 1.1s ease-in-out infinite}
+.ai-orb.speaking{animation:orbPulse .5s ease-in-out infinite}
+.ai-orb.speaking::before{opacity:.9}
+.ai-orb.speaking .burst{filter:drop-shadow(0 0 18px var(--ai-glow)) drop-shadow(0 0 34px var(--ai-glow))}
+.ai-orb.speaking .ray{animation-duration:.7s}
+.ai-orb.speaking .sonar{animation:sonar 1.5s ease-out infinite}
+.ai-orb.speaking .sonar.s2{animation-delay:.75s}
+@keyframes orbSpin{to{transform:rotate(360deg)}}
+@keyframes orbBreathe{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
+@keyframes orbPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+@keyframes orbThink{0%,100%{opacity:.28}50%{opacity:1}}
+@keyframes sonar{0%{transform:scale(.62);opacity:.55}100%{transform:scale(1.5);opacity:0}}
+.ai-status{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ai-mint);min-height:14px;text-align:center}
+.ai-modes{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.ai-modes button{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:9px 13px;border-radius:999px;border:1px solid rgba(43,230,160,.4);background:rgba(43,230,160,.08);color:#eafff6;cursor:pointer;transition:.15s}
+.ai-modes button:hover{background:var(--ai-mint);color:#000}
+.ai-chat{flex:1 1 auto;overflow-y:auto;padding:10px 16px 14px;display:flex;flex-direction:column;gap:10px}
+.ai-msg{max-width:88%;padding:10px 13px;border-radius:13px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;animation:aiUp .2s ease}
+.ai-msg.ex{align-self:flex-start;background:rgba(43,230,160,.10);border:1px solid rgba(43,230,160,.26);color:#eafff6;border-bottom-left-radius:4px}
+.ai-msg.me{align-self:flex-end;background:#161616;border:1px solid rgba(255,255,255,.12);color:#fff;border-bottom-right-radius:4px}
+@keyframes aiUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.ai-inputbar{display:flex;gap:9px;align-items:center;padding:11px 14px;border-top:1px solid rgba(255,255,255,.08);flex:0 0 auto;background:#000}
+.ai-mic{width:50px;height:50px;flex:0 0 50px;border-radius:50%;border:1px solid var(--ai-mint);background:rgba(43,230,160,.12);color:var(--ai-mint);display:grid;place-items:center;cursor:pointer;transition:.12s}
+.ai-mic svg{width:21px;height:21px}
+.ai-mic.live{background:var(--ai-mint);color:#000;animation:micLive 1.1s infinite}
+@keyframes micLive{0%,100%{box-shadow:0 0 0 0 rgba(43,230,160,.5)}50%{box-shadow:0 0 0 9px rgba(43,230,160,0)}}
+.ai-textin{flex:1;background:#0d0d0d;border:1px solid rgba(255,255,255,.14);border-radius:12px;color:#fff;font-family:var(--mono);font-size:14px;padding:13px 14px;min-width:0}
+.ai-textin:focus{outline:none;border-color:var(--ai-mint)}
+.ai-sendbtn{width:50px;height:50px;flex:0 0 50px;border-radius:12px;border:none;background:var(--ai-mint);color:#000;font-size:18px;cursor:pointer}
+.ai-sendbtn:disabled{opacity:.4}
 </style>
 </head>
 <body>
@@ -390,6 +445,12 @@ select{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%
     </div>
     <h1>SPEAKING<br><span class="mint">LAB</span><span class="cur"></span></h1>
     <p class="hero-sub">Pick a question, record your answer right here or drop a Telegram voice link, and get a band score with feedback from your teacher.</p>
+
+    <button class="ai-cta" id="aiBtn">
+      <svg class="burst mini" viewBox="0 0 100 100"><line class="ray" x1="65" y1="50" x2="93" y2="50"/><line class="ray" x1="60.6" y1="60.6" x2="80.4" y2="80.4"/><line class="ray" x1="50" y1="65" x2="50" y2="93"/><line class="ray" x1="39.4" y1="60.6" x2="19.6" y2="80.4"/><line class="ray" x1="35" y1="50" x2="7" y2="50"/><line class="ray" x1="39.4" y1="39.4" x2="19.6" y2="19.6"/><line class="ray" x1="50" y1="35" x2="50" y2="7"/><line class="ray" x1="60.6" y1="39.4" x2="80.4" y2="19.6"/></svg>
+      <span><span class="lab">AI Examiner</span><span class="sub">Talk to pangea8 — a live AI speaking partner that asks &amp; replies</span></span>
+      <span class="ar">→</span>
+    </button>
 
     <!-- role switch -->
     <div class="role-bar" id="roleBar">
@@ -610,6 +671,35 @@ select{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%
 </div>
 
 <audio id="globalAudio" preload="metadata"></audio>
+
+<!-- ============ AI EXAMINER ============ -->
+<div class="ai-modal" id="aiModal" aria-hidden="true">
+  <div class="ai-topbar">
+    <span class="ai-brand"><b>pangea8</b> &middot; AI Examiner</span>
+    <button class="ai-xbtn" id="aiX" aria-label="Close">&#10005;</button>
+  </div>
+  <div class="ai-stage">
+    <div class="ai-orb" id="aiOrb">
+      <span class="sonar"></span><span class="sonar s2"></span>
+      <svg class="burst" viewBox="0 0 100 100"><line class="ray" x1="65" y1="50" x2="93" y2="50"/><line class="ray" x1="60.6" y1="60.6" x2="80.4" y2="80.4"/><line class="ray" x1="50" y1="65" x2="50" y2="93"/><line class="ray" x1="39.4" y1="60.6" x2="19.6" y2="80.4"/><line class="ray" x1="35" y1="50" x2="7" y2="50"/><line class="ray" x1="39.4" y1="39.4" x2="19.6" y2="19.6"/><line class="ray" x1="50" y1="35" x2="50" y2="7"/><line class="ray" x1="60.6" y1="39.4" x2="80.4" y2="19.6"/></svg>
+    </div>
+    <div class="ai-status" id="aiStatus">Choose a part to begin</div>
+    <div class="ai-modes" id="aiModes">
+      <button data-m="1">Part 1</button>
+      <button data-m="2">Part 2</button>
+      <button data-m="3">Part 3</button>
+      <button data-m="mock">Full mock</button>
+    </div>
+  </div>
+  <div class="ai-chat" id="aiChat"></div>
+  <div class="ai-inputbar">
+    <button class="ai-mic" id="aiMic" aria-label="Tap to talk">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
+    <input class="ai-textin" id="aiText" placeholder="Type, or tap the mic to speak…" autocomplete="off">
+    <button class="ai-sendbtn" id="aiSend" aria-label="Send">&#10148;</button>
+  </div>
+</div>
 
 </body>
 
@@ -1291,6 +1381,132 @@ function enterTeacher(){
 }
 
 /* ---------- wiring ---------- */
+/* ===================== AI EXAMINER ===================== */
+const AI_ENDPOINT = 'https://pangeya-ai.vercel.app/api/chat';
+let aiHistory = [];          // [{role:'user'|'assistant', content}]
+let aiSys = '';              // active system prompt
+let aiVoice = null;
+let aiRec = null, aiListening = false, aiBusy = false;
+
+function aiSystemPrompt(mode){
+  const base = "You are 'pangea8', a warm, encouraging IELTS Speaking examiner and practice partner. Run a realistic IELTS speaking practice with the candidate. Ask ONE question at a time, then wait for the answer. Keep your own turns short and natural like a real examiner — never long monologues. Use clear, simple British English. After an answer, give a brief natural follow-up or move on. When the candidate asks for feedback (or at the very end), give short, specific feedback on fluency, vocabulary, grammar and pronunciation, plus an approximate band score from 4 to 9. Never use markdown, asterisks, bullet points or numbered lists — speak in plain spoken sentences, because your replies are read aloud.";
+  const add = {
+    '1': " Focus on Part 1: short questions about familiar topics (home, work or study, hobbies, daily life). Two or three quick questions per topic.",
+    '2': " Focus on Part 2: give the candidate a cue card — a 'Describe...' task with three or four points to cover. Tell them they have one minute to prepare and should speak for up to two minutes, then ask one or two short rounding-off questions.",
+    '3': " Focus on Part 3: abstract discussion questions linked to a theme. Ask deeper 'why' and 'how' questions and follow up on the candidate's ideas.",
+    'mock': " Run a full mock from start to finish: a short greeting and identity check, then Part 1 (two topics), then a Part 2 cue card, then Part 3 discussion. Move through the parts naturally, one question at a time."
+  }[mode] || "";
+  return base + add;
+}
+
+function aiSetStatus(txt, orbState){
+  const s = $('aiStatus'); if(s) s.textContent = txt || '';
+  const o = $('aiOrb'); if(o){ o.classList.remove('thinking','speaking'); if(orbState) o.classList.add(orbState); }
+}
+function aiAddMsg(text, who){
+  const d = document.createElement('div');
+  d.className = 'ai-msg ' + (who === 'ex' ? 'ex' : 'me');
+  d.textContent = text;
+  $('aiChat').appendChild(d);
+  $('aiChat').scrollTop = $('aiChat').scrollHeight;
+}
+
+function aiPickVoice(){
+  if(!('speechSynthesis' in window)) return;
+  const vs = speechSynthesis.getVoices();
+  aiVoice = vs.find(v=>/en[-_]GB/i.test(v.lang)) || vs.find(v=>/^en/i.test(v.lang)) || vs[0] || null;
+}
+function aiSpeak(text){
+  if(!('speechSynthesis' in window)){ aiSetStatus('Your turn — tap the mic or type', ''); return; }
+  try{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text.replace(/[*_#`>]/g,''));
+    if(aiVoice) u.voice = aiVoice;
+    u.lang = (aiVoice && aiVoice.lang) || 'en-GB';
+    u.rate = 0.96; u.pitch = 1;
+    u.onstart = ()=>aiSetStatus('Speaking…', 'speaking');
+    u.onend   = ()=>aiSetStatus('Your turn — tap the mic or type', '');
+    speechSynthesis.speak(u);
+  }catch(_){ aiSetStatus('Your turn — tap the mic or type', ''); }
+}
+
+async function aiSend(userText, sysOverride, hidden){
+  if(aiBusy) return;
+  const sys = sysOverride || aiSys; aiSys = sys;
+  if(!hidden) aiAddMsg(userText, 'me');
+  aiBusy = true; $('aiSend').disabled = true;
+  aiSetStatus('Thinking…', 'thinking');
+  const prior = aiHistory.slice();   // history BEFORE this user turn
+  try{
+    const res = await fetch(AI_ENDPOINT, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ message:userText, chatHistory:prior, systemPrompt:sys })
+    });
+    const data = await res.json().catch(()=>({}));
+    const reply = (data && (data.reply || data.message || data.content)) || '';
+    if(!reply) throw new Error((data && data.error) || 'No reply');
+    aiHistory.push({role:'user', content:userText});
+    aiHistory.push({role:'assistant', content:reply});
+    aiAddMsg(reply, 'ex');
+    aiSpeak(reply);
+  }catch(e){
+    aiSetStatus('Tap the mic or type to continue', '');
+    aiAddMsg('⚠️ Could not reach the examiner. Check your connection and try again.', 'ex');
+  }finally{
+    aiBusy = false; $('aiSend').disabled = false;
+  }
+}
+
+async function aiStart(mode){
+  try{ speechSynthesis && speechSynthesis.cancel(); }catch(_){}
+  aiHistory = [];
+  $('aiChat').innerHTML = '';
+  $('aiModes').style.display = 'none';
+  await aiSend("(Begin the speaking test now. Greet me briefly and ask your first question.)", aiSystemPrompt(mode), true);
+}
+
+function aiInitRec(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ const m=$('aiMic'); if(m) m.style.display='none'; return; }
+  aiRec = new SR();
+  aiRec.lang = 'en-US'; aiRec.interimResults = true; aiRec.continuous = false;
+  aiRec.onresult = e=>{ let t=''; for(let i=0;i<e.results.length;i++) t+=e.results[i][0].transcript; $('aiText').value = t; };
+  aiRec.onerror  = ()=>{ aiListening=false; $('aiMic').classList.remove('live'); };
+  aiRec.onend    = ()=>{
+    aiListening=false; $('aiMic').classList.remove('live');
+    const t = $('aiText').value.trim();
+    if(t){ $('aiText').value=''; aiSend(t); }
+    else aiSetStatus('Your turn — tap the mic or type', '');
+  };
+}
+function aiToggleMic(){
+  if(!aiRec) return;
+  if(aiListening){ try{ aiRec.stop(); }catch(_){} return; }
+  try{
+    speechSynthesis && speechSynthesis.cancel();
+    $('aiText').value='';
+    aiRec.start(); aiListening=true; $('aiMic').classList.add('live');
+    aiSetStatus('Listening…', '');
+  }catch(_){}
+}
+
+function openAI(){
+  aiHistory = [];
+  $('aiChat').innerHTML = '';
+  $('aiModes').style.display = 'flex';
+  aiSetStatus('Choose a part to begin', '');
+  $('aiModal').classList.add('show');
+  $('aiModal').setAttribute('aria-hidden','false');
+  aiPickVoice();
+}
+function closeAI(){
+  $('aiModal').classList.remove('show');
+  $('aiModal').setAttribute('aria-hidden','true');
+  try{ speechSynthesis && speechSynthesis.cancel(); }catch(_){}
+  if(aiRec && aiListening){ try{ aiRec.stop(); }catch(_){} }
+  aiSetStatus('', '');
+}
+
 function init(){
   // clock
   function clock(){ const d=new Date(),p=n=>(n<10?'0':'')+n; const el=$('clock'); if(el) el.textContent='TASHKENT '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }
@@ -1335,6 +1551,16 @@ function init(){
   // guide
   $('guideBtn').addEventListener('click',()=>$('guideModal').classList.add('show'));
   $('guideClose').addEventListener('click',()=>$('guideModal').classList.remove('show'));
+
+  // AI examiner
+  $('aiBtn').addEventListener('click', openAI);
+  $('aiX').addEventListener('click', closeAI);
+  $('aiSend').addEventListener('click', ()=>{ const t=$('aiText').value.trim(); if(t){ $('aiText').value=''; aiSend(t); } });
+  $('aiText').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); const t=$('aiText').value.trim(); if(t){ $('aiText').value=''; aiSend(t); } } });
+  $('aiMic').addEventListener('click', aiToggleMic);
+  document.querySelectorAll('#aiModes button').forEach(b=>b.addEventListener('click', ()=>aiStart(b.dataset.m)));
+  aiInitRec();
+  if('speechSynthesis' in window){ aiPickVoice(); speechSynthesis.onvoiceschanged = aiPickVoice; }
 
   // theme toggle (light / dark) — icon shows the mode you'll switch to
   const SUN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.5M12 19v2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M2.5 12H5M19 12h2.5M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/></svg>';
