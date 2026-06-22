@@ -685,7 +685,17 @@ async function loadAnswers(force){
 }
 
 /* ---------- render ---------- */
-function answersFor(qId){ return allAnswers.filter(a=>a.data.questionId===qId).sort((x,y)=>toDate(y.data.timestamp)-toDate(x.data.timestamp)); }
+let _ansIndex=null;
+function buildAnsIndex(){
+  const m=new Map();
+  for(const a of allAnswers){ const k=a.data.questionId; let arr=m.get(k); if(!arr){ arr=[]; m.set(k,arr); } arr.push(a); }
+  for(const arr of m.values()) arr.sort((x,y)=>toDate(y.data.timestamp)-toDate(x.data.timestamp));
+  _ansIndex=m;
+}
+function answersFor(qId){
+  if(_ansIndex) return _ansIndex.get(qId)||[];
+  return allAnswers.filter(a=>a.data.questionId===qId).sort((x,y)=>toDate(y.data.timestamp)-toDate(x.data.timestamp));
+}
 
 function updateCounts(){
   const by=p=>allQuestions.filter(q=>String(q.data.part)===String(p)).length;
@@ -695,6 +705,7 @@ function updateCounts(){
 
 function paint(){
   updateCounts();
+  buildAnsIndex();
   const list=$('qList'); list.innerHTML='';
   let qs=allQuestions;
   if(currentPart!=='all') qs=qs.filter(q=>String(q.data.part)===String(currentPart));
@@ -1338,10 +1349,14 @@ function init(){
   applyTheme(savedTheme || 'dark');
   $('themeBtn').addEventListener('click',()=>applyTheme(document.documentElement.dataset.theme==='light'?'dark':'light'));
 
-  // search (questions + student names)
-  const sInp=$('qSearch'), sClr=$('qSearchClr');
-  sInp.addEventListener('input',()=>{ searchTerm=sInp.value.trim().toLowerCase(); sClr.style.display=sInp.value?'block':'none'; paint(); });
-  sClr.addEventListener('click',()=>{ sInp.value=''; searchTerm=''; sClr.style.display='none'; paint(); sInp.focus(); });
+  // search (questions + student names) — debounced so typing stays smooth
+  const sInp=$('qSearch'), sClr=$('qSearchClr'); let searchT=null;
+  sInp.addEventListener('input',()=>{
+    sClr.style.display=sInp.value?'block':'none';
+    clearTimeout(searchT);
+    searchT=setTimeout(()=>{ searchTerm=sInp.value.trim().toLowerCase(); paint(); },140);
+  });
+  sClr.addEventListener('click',()=>{ clearTimeout(searchT); sInp.value=''; searchTerm=''; sClr.style.display='none'; paint(); sInp.focus(); });
   document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m){ m.classList.remove('show'); if(m.id==='ansModal') stopStream(); } }));
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.modal.show').forEach(m=>{ m.classList.remove('show'); if(m.id==='ansModal') stopStream(); }); });
 
