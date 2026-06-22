@@ -403,7 +403,7 @@ select{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%
 .ai-mic svg{width:21px;height:21px}
 .ai-mic.live{background:var(--ai-mint);color:#000;animation:micLive 1.1s infinite}
 @keyframes micLive{0%,100%{box-shadow:0 0 0 0 rgba(43,230,160,.5)}50%{box-shadow:0 0 0 9px rgba(43,230,160,0)}}
-.ai-textin{flex:1;background:#0d0d0d;border:1px solid rgba(255,255,255,.14);border-radius:12px;color:#fff;font-family:var(--mono);font-size:14px;padding:13px 14px;min-width:0}
+.ai-textin{flex:1;background:#0d0d0d;border:1px solid rgba(255,255,255,.14);border-radius:12px;color:#fff;font-family:var(--mono);font-size:16px;padding:12px 14px;min-width:0}
 .ai-textin:focus{outline:none;border-color:var(--ai-mint)}
 .ai-sendbtn{width:50px;height:50px;flex:0 0 50px;border-radius:12px;border:none;background:var(--ai-mint);color:#000;font-size:18px;cursor:pointer}
 .ai-sendbtn:disabled{opacity:.4}
@@ -1416,6 +1416,10 @@ const AI_VOICE = 'fable';          // OpenAI voice: alloy / echo / fable / onyx 
 const AI_SILENT = 'data:audio/wav;base64,UklGRjwAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 const aiAudio = new Audio();
 aiAudio.preload = 'auto';
+const AI_STT_ENDPOINT = 'https://pangeya-ai.vercel.app/api/transcribe';
+const aiIsIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let aiUseWhisper = false;            // iOS / no SpeechRecognition -> record + Whisper
+let aiMR = null, aiChunks = [], aiRecording = false;
 function aiUnlockAudio(){           // iOS/Safari needs a gesture-initiated play before later audio works
   try{ aiAudio.src = AI_SILENT; const p = aiAudio.play(); if(p && p.catch) p.catch(()=>{}); }catch(_){}
 }
@@ -1433,28 +1437,20 @@ function aiPickVoice(){
   };
   aiVoice = vs.slice().sort((a,b)=>score(b)-score(a))[0] || null;
 }
+function aiTtsUrl(text){ return AI_TTS_ENDPOINT + '?voice=' + AI_VOICE + '&text=' + encodeURIComponent(text); }
 async function aiSpeak(text){
   const clean = (text||'').replace(/[*_#`>]/g,'').trim();
   if(!clean){ aiSetStatus('Your turn — tap the mic or type',''); return; }
-  // 1) natural neural voice via the AI backend
+  // natural neural voice, streamed from the backend so it starts almost immediately
   try{
-    const res = await fetch(AI_TTS_ENDPOINT, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ text: clean, voice: AI_VOICE })
-    });
-    if(!res.ok) throw new Error('tts ' + res.status);
-    const blob = await res.blob();
-    if(!blob || blob.size < 256) throw new Error('bad audio');
-    if(aiAudio._url){ try{ URL.revokeObjectURL(aiAudio._url); }catch(_){} }
-    aiAudio._url = URL.createObjectURL(blob);
-    aiAudio.src = aiAudio._url;
+    aiAudio.src = aiTtsUrl(clean);
     aiAudio.onplay  = ()=>aiSetStatus('Speaking…', 'speaking');
     aiAudio.onended = ()=>aiSetStatus('Your turn — tap the mic or type', '');
     aiAudio.onerror = ()=>aiSpeakBrowser(clean);
-    await aiAudio.play();
-    return;
+    const p = aiAudio.play();
+    if(p && p.catch) p.catch(()=>aiSpeakBrowser(clean));
   }catch(e){
-    aiSpeakBrowser(clean);          // 2) fall back to the best available browser voice
+    aiSpeakBrowser(clean);          // fall back to the best available browser voice
   }
 }
 function aiSpeakBrowser(clean){
@@ -1508,19 +1504,24 @@ async function aiStart(mode){
 
 function aiInitRec(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){ const m=$('aiMic'); if(m) m.style.display='none'; return; }
-  aiRec = new SR();
-  aiRec.lang = 'en-US'; aiRec.interimResults = true; aiRec.continuous = false;
-  aiRec.onresult = e=>{ let t=''; for(let i=0;i<e.results.length;i++) t+=e.results[i][0].transcript; $('aiText').value = t; };
-  aiRec.onerror  = ()=>{ aiListening=false; $('aiMic').classList.remove('live'); };
-  aiRec.onend    = ()=>{
-    aiListening=false; $('aiMic').classList.remove('live');
-    const t = $('aiText').value.trim();
-    if(t){ $('aiText').value=''; aiSend(t); }
-    else aiSetStatus('Your turn — tap the mic or type', '');
-  };
+  if(SR && !aiIsIOS){
+    aiRec = new SR();
+    aiRec.lang = 'en-US'; aiRec.interimResults = true; aiRec.continuous = false;
+    aiRec.onresult = e=>{ let t=''; for(let i=0;i<e.results.length;i++) t+=e.results[i][0].transcript; $('aiText').value = t; };
+    aiRec.onerror  = ()=>{ aiListening=false; $('aiMic').classList.remove('live'); };
+    aiRec.onend    = ()=>{
+      aiListening=false; $('aiMic').classList.remove('live');
+      const t = $('aiText').value.trim();
+      if(t){ $('aiText').value=''; aiSend(t); }
+      else aiSetStatus('Your turn — tap the mic or type', '');
+    };
+    aiUseWhisper = false;
+  } else {
+    aiUseWhisper = true;             // iOS Safari has no working Web Speech -> use Whisper
+  }
 }
 function aiToggleMic(){
+  if(aiUseWhisper) return aiToggleWhisper();
   if(!aiRec) return;
   if(aiListening){ try{ aiRec.stop(); }catch(_){} return; }
   try{
@@ -1530,6 +1531,34 @@ function aiToggleMic(){
     aiSetStatus('Listening…', '');
   }catch(_){}
 }
+async function aiToggleWhisper(){
+  if(aiRecording){ try{ aiMR && aiMR.stop(); }catch(_){} return; }   // tap again to stop
+  try{
+    speechSynthesis && speechSynthesis.cancel();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    const mime = (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/mp4')) ? 'audio/mp4'
+               : (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : '';
+    aiMR = mime ? new MediaRecorder(stream,{mimeType:mime}) : new MediaRecorder(stream);
+    aiChunks = [];
+    aiMR.ondataavailable = e=>{ if(e.data && e.data.size) aiChunks.push(e.data); };
+    aiMR.onstop = async ()=>{
+      aiRecording=false; $('aiMic').classList.remove('live');
+      try{ stream.getTracks().forEach(t=>t.stop()); }catch(_){}
+      const blob = new Blob(aiChunks, { type: (aiMR && aiMR.mimeType) || 'audio/webm' });
+      if(blob.size < 900){ aiSetStatus('Your turn — tap the mic or type',''); return; }
+      aiSetStatus('Transcribing…','thinking');
+      try{
+        const res = await fetch(AI_STT_ENDPOINT, { method:'POST', headers:{'Content-Type': blob.type || 'audio/webm'}, body: blob });
+        const data = await res.json().catch(()=>({}));
+        const text = ((data && data.text) || '').trim();
+        if(text){ aiSend(text); } else { aiSetStatus('Didn\u2019t catch that — try again',''); }
+      }catch(_){ aiSetStatus('Could not transcribe — type instead',''); }
+    };
+    aiMR.start();
+    aiRecording=true; $('aiMic').classList.add('live');
+    aiSetStatus('Listening… tap mic to stop','');
+  }catch(_){ aiSetStatus('Mic blocked — allow access or type',''); }
+}
 
 function openAI(){
   aiHistory = [];
@@ -1538,15 +1567,22 @@ function openAI(){
   aiSetStatus('Choose a part to begin', '');
   $('aiModal').classList.add('show');
   $('aiModal').setAttribute('aria-hidden','false');
+  if(window.visualViewport) $('aiModal').style.height = window.visualViewport.height + 'px';
   aiPickVoice();
-  // warm up the serverless functions (OPTIONS returns instantly, no OpenAI call) so the first reply is fast
-  try{ fetch(AI_ENDPOINT,{method:'OPTIONS'}); fetch(AI_TTS_ENDPOINT,{method:'OPTIONS'}); }catch(_){}
+  // real warm-up: prime both functions + the OpenAI connection so the FIRST reply has no cold-start delay
+  try{
+    fetch(aiTtsUrl('hi')).catch(()=>{});
+    fetch(AI_ENDPOINT, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ message:'hi', chatHistory:[], systemPrompt:'Reply with: ok', maxTokens:1 }) }).catch(()=>{});
+  }catch(_){}
 }
 function closeAI(){
   $('aiModal').classList.remove('show');
   $('aiModal').setAttribute('aria-hidden','true');
+  $('aiModal').style.height = '';
   try{ speechSynthesis && speechSynthesis.cancel(); }catch(_){}
+  try{ aiAudio.pause(); }catch(_){}
   if(aiRec && aiListening){ try{ aiRec.stop(); }catch(_){} }
+  if(aiMR && aiRecording){ try{ aiMR.stop(); }catch(_){} }
   aiSetStatus('', '');
 }
 
@@ -1604,6 +1640,11 @@ function init(){
   document.querySelectorAll('#aiModes button').forEach(b=>b.addEventListener('click', ()=>{ aiUnlockAudio(); aiStart(b.dataset.m); }));
   aiInitRec();
   if('speechSynthesis' in window){ aiPickVoice(); speechSynthesis.onvoiceschanged = aiPickVoice; }
+  if(window.visualViewport){
+    const vv = window.visualViewport;
+    const fit = ()=>{ const m=$('aiModal'); if(m && m.classList.contains('show')) m.style.height = vv.height + 'px'; };
+    vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit);
+  }
 
   // theme toggle (light / dark) — icon shows the mode you'll switch to
   const SUN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.5M12 19v2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M2.5 12H5M19 12h2.5M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/></svg>';
