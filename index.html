@@ -944,7 +944,7 @@ async function deleteQuestion(qId){
     await deleteDoc(doc(db,'speakingQuestions',qId));
     // also remove answers for it
     const kids=answersFor(qId);
-    for(const a of kids){ try{ await deleteDoc(doc(db,'speakingAnswers',a.id)); }catch(_){} }
+    for(const a of kids){ try{ await deleteSupabaseAudio(a.data.audioPath); await deleteDoc(doc(db,'speakingAnswers',a.id)); }catch(_){} }
     allQuestions=allQuestions.filter(q=>q.id!==qId);
     allAnswers=allAnswers.filter(a=>a.data.questionId!==qId);
     render(); toast('Question deleted.');
@@ -1098,9 +1098,19 @@ async function saveFb(){
   }catch(e){ console.error(e); toast('Save failed.'); }
   finally{ btn.disabled=false; }
 }
+async function deleteSupabaseAudio(audioPath){
+  if(!audioPath) return;            // telegram-link answers have no uploaded file
+  try{
+    await fetch(SUPABASE_URL+'/storage/v1/object/'+SUPABASE_BUCKET+'/'+audioPath,{
+      method:'DELETE',
+      headers:{ 'apikey':SUPABASE_KEY, 'Authorization':'Bearer '+SUPABASE_KEY }
+    });
+  }catch(_){ /* file may already be gone — ignore */ }
+}
 async function deleteAnswer(aId,a){
   if(!confirm('Delete this answer?')) return;
   try{
+    await deleteSupabaseAudio(a.audioPath);     // free the storage file too
     await deleteDoc(doc(db,'speakingAnswers',aId));
     allAnswers=allAnswers.filter(x=>x.id!==aId);
     render(); toast('Answer deleted.');
