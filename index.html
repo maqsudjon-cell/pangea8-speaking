@@ -1389,7 +1389,7 @@ let aiVoice = null;
 let aiRec = null, aiListening = false, aiBusy = false;
 
 function aiSystemPrompt(mode){
-  const base = "You are 'pangea8', a warm, encouraging IELTS Speaking examiner and practice partner. Run a realistic IELTS speaking practice with the candidate. Ask ONE question at a time, then wait for the answer. Keep your own turns short and natural like a real examiner — never long monologues. Use clear, simple British English. After an answer, give a brief natural follow-up or move on. When the candidate asks for feedback (or at the very end), give short, specific feedback on fluency, vocabulary, grammar and pronunciation, plus an approximate band score from 4 to 9. Never use markdown, asterisks, bullet points or numbered lists — speak in plain spoken sentences, because your replies are read aloud.";
+  const base = "You are 'pangea8', a warm, encouraging IELTS Speaking examiner and practice partner. Run a realistic IELTS speaking practice with the candidate. Ask ONE question at a time, then wait for the answer. Keep every reply to one to three short sentences — never a long monologue. Use clear, simple British English. After an answer, give a brief natural follow-up or move on. When the candidate asks for feedback (or at the very end), give short, specific feedback on fluency, vocabulary, grammar and pronunciation, plus an approximate band score from 4 to 9. Never use markdown, asterisks, bullet points or numbered lists — speak in plain spoken sentences, because your replies are read aloud.";
   const add = {
     '1': " Focus on Part 1: short questions about familiar topics (home, work or study, hobbies, daily life). Two or three quick questions per topic.",
     '2': " Focus on Part 2: give the candidate a cue card — a 'Describe...' task with three or four points to cover. Tell them they have one minute to prepare and should speak for up to two minutes, then ask one or two short rounding-off questions.",
@@ -1481,7 +1481,7 @@ async function aiSend(userText, sysOverride, hidden){
   try{
     const res = await fetch(AI_ENDPOINT, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ message:userText, chatHistory:prior, systemPrompt:sys })
+      body: JSON.stringify({ message:userText, chatHistory:prior, systemPrompt:sys, maxTokens:140 })
     });
     const data = await res.json().catch(()=>({}));
     const reply = (data && (data.reply || data.message || data.content)) || '';
@@ -1539,6 +1539,8 @@ function openAI(){
   $('aiModal').classList.add('show');
   $('aiModal').setAttribute('aria-hidden','false');
   aiPickVoice();
+  // warm up the serverless functions (OPTIONS returns instantly, no OpenAI call) so the first reply is fast
+  try{ fetch(AI_ENDPOINT,{method:'OPTIONS'}); fetch(AI_TTS_ENDPOINT,{method:'OPTIONS'}); }catch(_){}
 }
 function closeAI(){
   $('aiModal').classList.remove('show');
