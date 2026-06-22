@@ -1420,6 +1420,8 @@ const AI_STT_ENDPOINT = 'https://pangeya-ai.vercel.app/api/transcribe';
 const aiIsIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let aiUseWhisper = false;            // iOS / no SpeechRecognition -> record + Whisper
 let aiMR = null, aiChunks = [], aiRecording = false, aiVadTimer = null, aiAC = null;
+let aiTtsEngine = '';   // '' = try Orpheus; set to 'edge' once we learn Orpheus is unavailable
+let aiTtsObjUrl = null; // current blob URL for examiner audio (revoked before each new clip)
 function aiUnlockAudio(){           // iOS/Safari needs a gesture-initiated play before later audio works
   try{ aiAudio.src = AI_SILENT; const p = aiAudio.play(); if(p && p.catch) p.catch(()=>{}); }catch(_){}
 }
@@ -1437,13 +1439,21 @@ function aiPickVoice(){
   };
   aiVoice = vs.slice().sort((a,b)=>score(b)-score(a))[0] || null;
 }
-function aiTtsUrl(text){ return AI_TTS_ENDPOINT + '?voice=' + AI_VOICE + '&text=' + encodeURIComponent(text); }
+function aiTtsUrl(text){ let u = AI_TTS_ENDPOINT + '?voice=' + encodeURIComponent(AI_VOICE) + '&text=' + encodeURIComponent(text); if(aiTtsEngine) u += '&engine=' + aiTtsEngine; return u; }
 async function aiSpeak(text){
-  const clean = (text||'').replace(/[*_#`>]/g,'').trim();
+  const clean = (text||'').replace(/[*_#`>\[\]]/g,'').trim();
   if(!clean){ aiSetStatus('Your turn — tap the mic or type',''); return; }
-  // natural neural voice, streamed from the backend so it starts almost immediately
+  // Fetch the audio fully, then play it from a blob: smooth (no mid-stream stutter) and lets us
+  // read which engine actually served it, so we stop retrying Orpheus when it isn't available.
   try{
-    aiAudio.src = aiTtsUrl(clean);
+    const r = await fetch(aiTtsUrl(clean));
+    if(!r.ok) throw new Error('tts '+r.status);
+    const eng = r.headers.get('X-TTS-Engine');
+    if(eng==='edge' && aiTtsEngine!=='edge') aiTtsEngine='edge';
+    const blob = await r.blob();
+    if(aiTtsObjUrl){ try{ URL.revokeObjectURL(aiTtsObjUrl); }catch(_){ } }
+    aiTtsObjUrl = URL.createObjectURL(blob);
+    aiAudio.src = aiTtsObjUrl;
     aiAudio.onplay  = ()=>aiSetStatus('Speaking…', 'speaking');
     aiAudio.onended = ()=>aiSetStatus('Your turn — tap the mic or type', '');
     aiAudio.onerror = ()=>aiSpeakBrowser(clean);
@@ -1558,7 +1568,7 @@ async function aiToggleWhisper(){
         else aiSetStatus('Didn\u2019t catch that — tap mic to retry','');
       }catch(_){ aiSetStatus('Could not transcribe — type instead',''); }
     };
-    // voice-activity detection — auto-stop ~1.4s after you stop talking
+    // voice-activity detection — auto-stop ~2.5s after you stop talking (room to breathe / think; tap mic to stop sooner)
     try{
       aiAC = new (window.AudioContext || window.webkitAudioContext)();
       const node = aiAC.createMediaStreamSource(stream);
@@ -1570,13 +1580,13 @@ async function aiToggleWhisper(){
         let sum=0; for(let i=0;i<buf.length;i++){ const d=buf[i]-128; sum+=d*d; }
         const rms = Math.sqrt(sum/buf.length);
         if(rms > 7){ sawSpeech = true; silenceStart = null; }
-        else if(sawSpeech){ if(silenceStart==null) silenceStart=Date.now(); else if(Date.now()-silenceStart > 1400) aiStopWhisper(); }
-        else if(Date.now()-startedAt > 8000) aiStopWhisper();    // no speech at all -> stop
+        else if(sawSpeech){ if(silenceStart==null) silenceStart=Date.now(); else if(Date.now()-silenceStart > 2500) aiStopWhisper(); }
+        else if(Date.now()-startedAt > 12000) aiStopWhisper();    // no speech at all -> stop
       }, 140);
     }catch(_){}
     aiMR.start();
     aiRecording=true; $('aiMic').classList.add('live');
-    aiSetStatus('Listening… speak, I\u2019ll stop when you pause','');
+    aiSetStatus('Listening… take your time, I\u2019ll wait for a pause','');
   }catch(_){ aiSetStatus('Mic blocked — allow access or type',''); }
 }
 function aiStopWhisper(){
@@ -1596,7 +1606,7 @@ function openAI(){
   aiPickVoice();
   // real warm-up: prime both functions + the OpenAI connection so the FIRST reply has no cold-start delay
   try{
-    fetch(aiTtsUrl('hi')).catch(()=>{});
+    fetch(aiTtsUrl('Hello.')).then(r=>{ const e=r.headers.get('X-TTS-Engine'); if(e==='edge'&&aiTtsEngine!=='edge') aiTtsEngine='edge'; }).catch(()=>{});
     fetch(AI_ENDPOINT, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ message:'hi', chatHistory:[], systemPrompt:'Reply with: ok', maxTokens:1 }) }).catch(()=>{});
   }catch(_){}
 }
@@ -1606,6 +1616,7 @@ function closeAI(){
   $('aiModal').style.height = '';
   try{ speechSynthesis && speechSynthesis.cancel(); }catch(_){}
   try{ aiAudio.pause(); }catch(_){}
+  if(aiTtsObjUrl){ try{ URL.revokeObjectURL(aiTtsObjUrl); }catch(_){ } aiTtsObjUrl=null; }
   if(aiRec && aiListening){ try{ aiRec.stop(); }catch(_){} }
   if(aiVadTimer){ clearInterval(aiVadTimer); aiVadTimer=null; }
   try{ if(aiAC){ aiAC.close(); aiAC=null; } }catch(_){}
