@@ -1412,7 +1412,7 @@ function aiAddMsg(text, who){
 }
 
 const AI_TTS_ENDPOINT = 'https://pangeya-ai.vercel.app/api/tts';
-const AI_VOICE = 'en-US-AvaMultilingualNeural';   // free, natural-sounding Edge voice (US). Swap if you prefer another.
+const AI_VOICE = 'en-US-JennyNeural';   // natural AND fast to synthesize (Multilingual voices like Ava are slower)
 const AI_SILENT = 'data:audio/wav;base64,UklGRjwAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 const aiAudio = new Audio();
 aiAudio.preload = 'auto';
