@@ -1419,7 +1419,7 @@ aiAudio.preload = 'auto';
 const AI_STT_ENDPOINT = 'https://pangeya-ai.vercel.app/api/transcribe';
 const aiIsIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let aiUseWhisper = false;            // iOS / no SpeechRecognition -> record + Whisper
-let aiMR = null, aiChunks = [], aiRecording = false;
+let aiMR = null, aiChunks = [], aiRecording = false, aiVadTimer = null, aiAC = null;
 function aiUnlockAudio(){           // iOS/Safari needs a gesture-initiated play before later audio works
   try{ aiAudio.src = AI_SILENT; const p = aiAudio.play(); if(p && p.catch) p.catch(()=>{}); }catch(_){}
 }
@@ -1532,7 +1532,7 @@ function aiToggleMic(){
   }catch(_){}
 }
 async function aiToggleWhisper(){
-  if(aiRecording){ try{ aiMR && aiMR.stop(); }catch(_){} return; }   // tap again to stop
+  if(aiRecording){ aiStopWhisper(); return; }       // tap again to stop early
   try{
     speechSynthesis && speechSynthesis.cancel();
     const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
@@ -1543,21 +1543,46 @@ async function aiToggleWhisper(){
     aiMR.ondataavailable = e=>{ if(e.data && e.data.size) aiChunks.push(e.data); };
     aiMR.onstop = async ()=>{
       aiRecording=false; $('aiMic').classList.remove('live');
+      if(aiVadTimer){ clearInterval(aiVadTimer); aiVadTimer=null; }
       try{ stream.getTracks().forEach(t=>t.stop()); }catch(_){}
+      try{ if(aiAC){ aiAC.close(); aiAC=null; } }catch(_){}
+      if(!$('aiModal').classList.contains('show')) return;   // closed while recording
       const blob = new Blob(aiChunks, { type: (aiMR && aiMR.mimeType) || 'audio/webm' });
-      if(blob.size < 900){ aiSetStatus('Your turn — tap the mic or type',''); return; }
+      if(blob.size < 1100){ aiSetStatus('Your turn — tap the mic or type',''); return; }
       aiSetStatus('Transcribing…','thinking');
       try{
         const res = await fetch(AI_STT_ENDPOINT, { method:'POST', headers:{'Content-Type': blob.type || 'audio/webm'}, body: blob });
         const data = await res.json().catch(()=>({}));
         const text = ((data && data.text) || '').trim();
-        if(text){ aiSend(text); } else { aiSetStatus('Didn\u2019t catch that — try again',''); }
+        if(text){ $('aiText').value = text; aiSetStatus('Review, then tap send →',''); try{ $('aiText').focus(); }catch(_){} }
+        else aiSetStatus('Didn\u2019t catch that — tap mic to retry','');
       }catch(_){ aiSetStatus('Could not transcribe — type instead',''); }
     };
+    // voice-activity detection — auto-stop ~1.4s after you stop talking
+    try{
+      aiAC = new (window.AudioContext || window.webkitAudioContext)();
+      const node = aiAC.createMediaStreamSource(stream);
+      const an = aiAC.createAnalyser(); an.fftSize = 512; node.connect(an);
+      const buf = new Uint8Array(an.fftSize);
+      let sawSpeech = false, silenceStart = null; const startedAt = Date.now();
+      aiVadTimer = setInterval(()=>{
+        an.getByteTimeDomainData(buf);
+        let sum=0; for(let i=0;i<buf.length;i++){ const d=buf[i]-128; sum+=d*d; }
+        const rms = Math.sqrt(sum/buf.length);
+        if(rms > 7){ sawSpeech = true; silenceStart = null; }
+        else if(sawSpeech){ if(silenceStart==null) silenceStart=Date.now(); else if(Date.now()-silenceStart > 1400) aiStopWhisper(); }
+        else if(Date.now()-startedAt > 8000) aiStopWhisper();    // no speech at all -> stop
+      }, 140);
+    }catch(_){}
     aiMR.start();
     aiRecording=true; $('aiMic').classList.add('live');
-    aiSetStatus('Listening… tap mic to stop','');
+    aiSetStatus('Listening… speak, I\u2019ll stop when you pause','');
   }catch(_){ aiSetStatus('Mic blocked — allow access or type',''); }
+}
+function aiStopWhisper(){
+  if(!aiRecording) return;
+  if(aiVadTimer){ clearInterval(aiVadTimer); aiVadTimer=null; }
+  try{ if(aiMR && aiMR.state !== 'inactive') aiMR.stop(); }catch(_){}
 }
 
 function openAI(){
@@ -1582,7 +1607,10 @@ function closeAI(){
   try{ speechSynthesis && speechSynthesis.cancel(); }catch(_){}
   try{ aiAudio.pause(); }catch(_){}
   if(aiRec && aiListening){ try{ aiRec.stop(); }catch(_){} }
+  if(aiVadTimer){ clearInterval(aiVadTimer); aiVadTimer=null; }
+  try{ if(aiAC){ aiAC.close(); aiAC=null; } }catch(_){}
   if(aiMR && aiRecording){ try{ aiMR.stop(); }catch(_){} }
+  aiRecording=false;
   aiSetStatus('', '');
 }
 
