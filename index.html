@@ -1457,11 +1457,11 @@ async function aiSpeak(text){
   const clean = (text||'').replace(/[*_#`>\[\]]/g,'').trim();
   if(!clean){ aiSetStatus('Your turn — tap the mic or type',''); return; }
   const turn = ++aiSpokeGuard;
-  // iOS Safari cannot start a no-Range streamed clip quickly: it buffers for ~5–6s and
-  // fires 'playing' before any sound is audible, so the Edge clip "wins" the race yet
-  // stays silent for seconds. On iOS speak with the on-device voice instead — it starts
-  // in well under a second, is free, and works offline. Desktop keeps Edge (below).
-  if(aiIsIOS){ aiSpeakBrowser(clean); return; }
+  // iOS Safari can't progressively play a no-Range chunked stream — it buffers ~5–6s
+  // before any sound. So on iOS we DOWNLOAD the full Edge clip first, then play it as one
+  // complete in-memory file (iOS plays that immediately). Examiner replies are short, so
+  // the natural Edge voice starts with little delay. Desktop streams Edge directly (below).
+  if(aiIsIOS){ aiSpeakIOS(clean, turn); return; }
   let settled = false, fbTimer = null;
   const stale = ()=> turn !== aiSpokeGuard;
   const clearFb = ()=>{ if(fbTimer){ clearTimeout(fbTimer); fbTimer = null; } };
@@ -1486,6 +1486,33 @@ async function aiSpeak(text){
     const p = aiAudio.play();
     if(p && p.catch) p.catch(useBrowser);
   }catch(e){ useBrowser(); }
+}
+// iOS path: download the whole short clip, then play it complete (fast start, human voice).
+async function aiSpeakIOS(clean, turn){
+  const stale = ()=> turn !== aiSpokeGuard;
+  let usedFallback = false;
+  const fallback = ()=>{                       // only if the network truly stalls/fails
+    if(usedFallback || stale()) return;
+    usedFallback = true;
+    try{ aiAudio.pause(); }catch(_){}
+    aiSpeakBrowser(clean);                      // on-device voice as a safety net
+  };
+  const t = setTimeout(fallback, 5000);
+  try{
+    const r = await fetch(aiTtsUrl(clean), { cache:'no-store' });
+    if(!r.ok) throw new Error('tts ' + r.status);
+    const blob = await r.blob();
+    clearTimeout(t);
+    if(stale() || usedFallback) return;
+    if(aiTtsObjUrl){ try{ URL.revokeObjectURL(aiTtsObjUrl); }catch(_){} }
+    aiTtsObjUrl = URL.createObjectURL(blob);
+    aiAudio.src = aiTtsObjUrl;
+    aiAudio.onplaying = ()=>{ if(!stale()) aiSetStatus('Speaking…', 'speaking'); };
+    aiAudio.onended   = ()=>{ if(stale()) return; aiSetStatus('Your turn — tap the mic or type', ''); };
+    aiAudio.onerror   = fallback;
+    const p = aiAudio.play();
+    if(p && p.catch) p.catch(fallback);
+  }catch(e){ clearTimeout(t); fallback(); }
 }
 function aiSpeakBrowser(clean){
   if(!('speechSynthesis' in window)){ aiSetStatus('Your turn — tap the mic or type',''); return; }
