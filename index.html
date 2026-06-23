@@ -1422,8 +1422,20 @@ let aiUseWhisper = false;            // iOS / no SpeechRecognition -> record + W
 let aiMR = null, aiChunks = [], aiRecording = false, aiVadTimer = null, aiAC = null;
 let aiTtsEngine = '';   // '' = try Orpheus; set to 'edge' once we learn Orpheus is unavailable
 let aiTtsObjUrl = null; // current blob URL for examiner audio (revoked before each new clip)
+let aiTtsWarmed = false;
 function aiUnlockAudio(){           // iOS/Safari needs a gesture-initiated play before later audio works
   try{ aiAudio.src = AI_SILENT; const p = aiAudio.play(); if(p && p.catch) p.catch(()=>{}); }catch(_){}
+  // iOS only lets speechSynthesis speak after it has spoken once INSIDE a user gesture.
+  // Warm it silently here so the first examiner reply speaks with ~0 delay later.
+  if(!aiTtsWarmed && 'speechSynthesis' in window){
+    try{
+      aiTtsWarmed = true;
+      speechSynthesis.cancel();
+      const w = new SpeechSynthesisUtterance(' ');
+      w.volume = 0; w.rate = 2;
+      speechSynthesis.speak(w);
+    }catch(_){}
+  }
 }
 function aiPickVoice(){
   if(!('speechSynthesis' in window)) return;
@@ -1445,6 +1457,11 @@ async function aiSpeak(text){
   const clean = (text||'').replace(/[*_#`>\[\]]/g,'').trim();
   if(!clean){ aiSetStatus('Your turn — tap the mic or type',''); return; }
   const turn = ++aiSpokeGuard;
+  // iOS Safari cannot start a no-Range streamed clip quickly: it buffers for ~5–6s and
+  // fires 'playing' before any sound is audible, so the Edge clip "wins" the race yet
+  // stays silent for seconds. On iOS speak with the on-device voice instead — it starts
+  // in well under a second, is free, and works offline. Desktop keeps Edge (below).
+  if(aiIsIOS){ aiSpeakBrowser(clean); return; }
   let settled = false, fbTimer = null;
   const stale = ()=> turn !== aiSpokeGuard;
   const clearFb = ()=>{ if(fbTimer){ clearTimeout(fbTimer); fbTimer = null; } };
@@ -1474,6 +1491,7 @@ function aiSpeakBrowser(clean){
   if(!('speechSynthesis' in window)){ aiSetStatus('Your turn — tap the mic or type',''); return; }
   try{
     speechSynthesis.cancel();
+    try{ speechSynthesis.resume(); }catch(_){}
     const u = new SpeechSynthesisUtterance(clean);
     if(aiVoice) u.voice = aiVoice;
     u.lang = (aiVoice && aiVoice.lang) || 'en-GB';
