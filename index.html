@@ -1440,20 +1440,35 @@ function aiPickVoice(){
   aiVoice = vs.slice().sort((a,b)=>score(b)-score(a))[0] || null;
 }
 function aiTtsUrl(text){ let u = AI_TTS_ENDPOINT + '?voice=' + encodeURIComponent(AI_VOICE) + '&text=' + encodeURIComponent(text); if(aiTtsEngine) u += '&engine=' + aiTtsEngine; return u; }
+let aiSpokeGuard = 0;
 async function aiSpeak(text){
   const clean = (text||'').replace(/[*_#`>\[\]]/g,'').trim();
   if(!clean){ aiSetStatus('Your turn — tap the mic or type',''); return; }
-  // Stream the audio straight from the backend so it starts almost immediately (no full-clip wait).
+  const turn = ++aiSpokeGuard;
+  let settled = false, fbTimer = null;
+  const stale = ()=> turn !== aiSpokeGuard;
+  const clearFb = ()=>{ if(fbTimer){ clearTimeout(fbTimer); fbTimer = null; } };
+  const useBrowser = ()=>{                 // instant on-device voice (covers slow/failed Edge synth)
+    if(settled || stale()) return;
+    settled = true; clearFb();
+    try{ aiAudio.pause(); }catch(_){}      // stop the slow Edge clip so we don't double-speak
+    aiSpeakBrowser(clean);
+  };
+  const onEdgeStart = ()=>{                 // real audio started -> keep Edge, cancel fallback
+    if(settled || stale()) return;
+    settled = true; clearFb();
+    aiSetStatus('Speaking…', 'speaking');
+  };
+  // If the high-quality Edge voice hasn't STARTED within this budget, speak instantly instead.
+  fbTimer = setTimeout(useBrowser, aiIsIOS ? 1500 : 1100);
   try{
     aiAudio.src = aiTtsUrl(clean);
-    aiAudio.onplay  = ()=>aiSetStatus('Speaking…', 'speaking');
-    aiAudio.onended = ()=>aiSetStatus('Your turn — tap the mic or type', '');
-    aiAudio.onerror = ()=>aiSpeakBrowser(clean);
+    aiAudio.onplaying = onEdgeStart;
+    aiAudio.onended   = ()=>{ if(stale()) return; aiSetStatus('Your turn — tap the mic or type', ''); };
+    aiAudio.onerror   = useBrowser;
     const p = aiAudio.play();
-    if(p && p.catch) p.catch(()=>aiSpeakBrowser(clean));
-  }catch(e){
-    aiSpeakBrowser(clean);          // fall back to the best available browser voice
-  }
+    if(p && p.catch) p.catch(useBrowser);
+  }catch(e){ useBrowser(); }
 }
 function aiSpeakBrowser(clean){
   if(!('speechSynthesis' in window)){ aiSetStatus('Your turn — tap the mic or type',''); return; }
