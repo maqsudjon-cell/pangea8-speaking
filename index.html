@@ -408,6 +408,8 @@ select{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%
 .ai-sendbtn{width:50px;height:50px;flex:0 0 50px;border-radius:12px;border:none;background:var(--ai-mint);color:#000;font-size:18px;cursor:pointer}
 .ai-sendbtn:disabled{opacity:.4}
 </style>
+<script src="https://flarestamina.com/assets/fs-auth.js"></script>
+<script>window.FSAuth && FSAuth.require();</script>
 </head>
 <body>
 
@@ -701,6 +703,26 @@ select{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%
   </div>
 </div>
 
+
+<script>
+/* FS Account — identity autofill (name inputs are no longer typed by hand) */
+(function () {
+  function fill() {
+    try {
+      var u = window.FSAuth && FSAuth.getUser();
+      if (!u) return;
+      var full = ((u.first_name || '') + ' ' + (u.last_name || '')).trim();
+      ['name', 'ansName'].forEach(function (id) {
+        var i = document.getElementById(id);
+        if (i) { i.value = full; i.readOnly = true; i.placeholder = 'FS Account'; }
+      });
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fill);
+  else fill();
+  setTimeout(fill, 400); setTimeout(fill, 1200); // after draft restores
+})();
+</script>
 </body>
 
 <script type="module">
@@ -758,7 +780,8 @@ function toDate(v){ if(typeof v==='number') return new Date(v); const d=new Date
 function fmtDate(d){ try{ return d.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
 function fmtTime(s){ const m=Math.floor(s/60),ss=s%60; return (m<10?'0':'')+m+':'+(ss<10?'0':'')+ss; }
 function toast(msg){ let el=$('pgToast'); if(!el){ el=document.createElement('div'); el.id='pgToast'; el.className='toast'; document.body.appendChild(el); } el.textContent=msg; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),4000); }
-function getUserId(){ let id=localStorage.getItem('pangea8_spk_user'); if(!id){ id='u-'+Math.random().toString(36).slice(2,10); localStorage.setItem('pangea8_spk_user',id); } return id; }
+function fsName(){ try{ const u=window.FSAuth&&FSAuth.getUser(); if(u) return ((u.first_name||'')+' '+(u.last_name||'')).trim(); }catch(e){} return ''; }
+function getUserId(){ try{ const u=window.FSAuth&&FSAuth.getUser(); if(u&&u.phone) return u.phone; }catch(e){} let id=localStorage.getItem('pangea8_spk_user'); if(!id){ id='u-'+Math.random().toString(36).slice(2,10); localStorage.setItem('pangea8_spk_user',id); } return id; }
 
 /* ---------- load questions / answers (cache-first + parallel) ---------- */
 function ingestQ(snap){ const arr=[]; snap.forEach(d=>arr.push({id:d.id,data:d.data()})); arr.sort((a,b)=>toDate(b.data.timestamp).getTime()-toDate(a.data.timestamp).getTime()); allQuestions=arr; }
@@ -1013,10 +1036,9 @@ function renderStudentFb(panel,aId,sfb){
 }
 
 async function postStudentFb(aId,text){
-  let name=(localStorage.getItem('pangea8_spk_name')||'').trim();
+  let name=fsName()||(localStorage.getItem('pangea8_spk_name')||'').trim();
   if(!name && teacherMode) name=teacherName||'teacher';
-  if(!name){ name=(prompt('Your name (shown with your feedback):')||'').trim(); if(name) localStorage.setItem('pangea8_spk_name',name); }
-  if(!name) return null;
+  if(!name){ toast('Sign in at flarestamina.com/account first.'); return null; }
   const entry={ by:name, uid:getUserId(), text:text.trim(), ts:Date.now() };
   try{
     await updateDoc(doc(db,'speakingAnswers',aId),{ studentFb:arrayUnion(entry) });
@@ -1055,7 +1077,7 @@ async function deleteQuestion(qId){
 /* ---------- student: answer modal + recording ---------- */
 function openAnswerModal(qId,q){
   currentAnswerQ={id:qId,q};
-  $('ansName').value=localStorage.getItem('pangea8_spk_name')||'';
+  $('ansName').value=fsName()||localStorage.getItem('pangea8_spk_name')||'';
   // build "which question" selector from the topic's numbered sub-questions (Part 1 / Part 3)
   const subs=(q.cue||'').split('\n').map(l=>l.trim()).filter(l=>/^\d+\.\s/.test(l));
   const wrap=$('ansQWrap'), sel=$('ansQ');
